@@ -1,0 +1,40 @@
+### PGI pgcc compiler configuration
+CC              =	pgcc
+MPICC           =	mpicc
+OPT_FLAGS	=	-fast
+C99_FLAGS       =	-c99
+ACC_FLAGS	=	-ta=tesla:cc70,managed -Minfo=accel
+SIMD_LENGTH	    =	32
+
+### Parallelization Options
+# MPI parallelization
+MPI	            =	1
+
+# OpenMP/OpenACC (can only use one)
+OPENMP	        =	0
+OPENACC	        =	1
+
+# OpenCL
+OPENCL	        =	0
+SPLIT_DEV       =   	1
+
+### I/O Options
+# I/O method (netcdf and/or binary)
+NCIO	        =	0
+BINIO	        =	1
+
+# Compile for history output
+HISTORY	        =	0
+
+### Layout Options
+# DM/SVM Data Layout Options
+CFDL            =	0
+SFDL	        =	1
+
+# padded size for tiling: default (0) uses SIMD_LENGTH
+PADDED_NUM	    =	0
+
+### Vectorization Options- only valid for OpenMP/OpenACC
+# method for vectorization of RHS differentiation loops: 0 (none), 1 (outer loop), 2 (inner loop)
+RHS_SIMD_METHOD	=	1
+EXEC_DIR	    =	run/psg

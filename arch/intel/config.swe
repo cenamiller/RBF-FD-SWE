@@ -1,0 +1,45 @@
+
+### Intel icc compiler and MPI configuration
+CC		    =	icc
+MPICC		=	mpicc
+OPT_FLAGS	=	-O3 -fno-alias
+ARCH_FLAGS	=	-xHost
+C99_FLAGS	=	-std=c99 
+OMP_FLAGS	=	-fopenmp
+OCL_LIBS	=	-lOpenCL
+OCL_FLAGS   =   
+SIMD_LENGTH	=	8
+
+### Parallelization Options
+# MPI parallelization
+MPI	        =	0
+
+# OpenMP/OpenACC (can only use one)
+OPENMP	    =	0
+OPENACC	    =	0
+
+# OpenCL
+OPENCL	    =	1
+SPLIT_DEV   =   1
+
+### I/O Options
+# I/O method (netcdf and/or binary)
+NCIO	    =	1
+BINIO	    =	1
+
+# Compile for history output
+HISTORY    	=	0
+
+### Layout Options
+# DM/SVM Data Layout Options
+CFDL	    =	1
+SFDL	    =	1
+
+# padded size for tiling: default (0) uses SIMD_LENGTH
+PADDED_NUM	=	0
+
+### Vectorization Options- only valid for OpenMP/OpenACC
+# method for vectorization of RHS differentiation loops: 0 (none), 1 (outer loop), 2 (inner loop)
+RHS_SIMD_METHOD	=	2
+
+EXEC_DIR	=	run/openCL

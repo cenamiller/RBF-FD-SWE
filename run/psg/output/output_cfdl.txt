@@ -1,0 +1,47 @@
+
+Run script name: run.sh
+NumSubdevices = 1
+
+
+=============================================== Runtime Configurations ===================================================
+
+Input from file: yes
+	Input File Path: /gpfs/u/home/streater/Gen3/input_files/icos40962_tc5_input.bin
+
+Simulation length (timesteps): 100
+Number of attempts: 10
+USE RCM Node Ordering: yes
+
+============================================================================================================================
+
+
+
+====================================================================================== MPI Patch Decomposition ================================================================================================
+
+	Rank #  0:	halo_gid_s =       0,	compute_gid_s =       0,	lnbr_halo_gid_e =       0,	rnbr_halo_gid_s =   19520,	compute_gid_e =   20480,		halo_gid_e =   21472
+	Rank #  1:	halo_gid_s =   19520,	compute_gid_s =   20480,	lnbr_halo_gid_e =   21472,	rnbr_halo_gid_s =   40992,	compute_gid_e =   40992,		halo_gid_e =   40992
+
+================================================================================================================================================================================================================
+
+Attempt 1:	VERIFICATION SUCCEEDED
+Attempt 2:	VERIFICATION SUCCEEDED
+Attempt 3:	VERIFICATION SUCCEEDED
+Attempt 4:	VERIFICATION SUCCEEDED
+Attempt 5:	VERIFICATION SUCCEEDED
+Attempt 6:	VERIFICATION SUCCEEDED
+Attempt 7:	VERIFICATION SUCCEEDED
+Attempt 8:	VERIFICATION SUCCEEDED
+Attempt 9:	VERIFICATION SUCCEEDED
+Attempt 10:	VERIFICATION SUCCEEDED
+
+============================================================= Profiling Results ==============================================================
+
+Total Initialization Time (seconds): 	1.381248e+00
+Main RK4 Loop (seconds/timestep) -> 	Average: 	4.268747e-03 	Min: 	4.234938e-03 	Max: 	4.339754e-03 	STDDEV: 	8.920514e-06
+Eval_Rhs      (seconds/timestep) -> 	Average: 	1.267690e-03 	Min: 	1.261712e-03 	Max: 	1.272417e-03 	STDDEV: 	1.935221e-06
+Eval_K        (seconds/timestep) -> 	Average: 	4.760401e-04 	Min: 	4.738349e-04 	Max: 	4.928802e-04 	STDDEV: 	1.777473e-06
+Update_D      (seconds/timestep) -> 	Average: 	6.562186e-04 	Min: 	6.543416e-04 	Max: 	6.665342e-04 	STDDEV: 	1.128993e-06
+Update_H      (seconds/timestep) -> 	Average: 	1.582249e-04 	Min: 	1.574208e-04 	Max: 	1.622676e-04 	STDDEV: 	4.347282e-07
+MPI Overhead  (seconds/timestep) -> 	Average: 	1.487001e-03 	Min: 	1.463597e-03 	Max: 	1.502295e-03 	STDDEV: 	4.225733e-06
+
+==============================================================================================================================================

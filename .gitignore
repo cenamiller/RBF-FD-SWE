@@ -1,0 +1,10 @@
+# Ignore all data files (ending in .nc or .bin), except for the smallest for testing:
+*icos??????_tc5_input.nc
+*icos?????_tc5_input.nc
+*icos??????_tc5_input.bin
+*icos?????_tc5_input.bin
+
+# OS generated files
+.DS_Store
+._*
+

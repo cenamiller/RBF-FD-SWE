@@ -1,0 +1,52 @@
+
+### HPCL compilation options
+CC		=       gcc
+MPICC		=	mpicc
+OPT_FLAGS	=	-O3
+SIMD_LENGTH	=	8
+C99_FLAGS	=	-std=c99 
+OMP_FLAGS	=	-fopenmp
+ACC_FLAGS	=	-fopenacc -fopenacc-dim=:1:4
+OCL_LIBS	=	-L/usr/local/opencl/ocl-icd/2.2.12/lib -lrt -ldl -lOpenCL 
+OCL_FLAGS	=	-I/usr/local/opencl/include	
+SWE_LIBS	+=	-lm	
+
+##################################################################
+#                                                                #
+#                Model Configuration Options                     #
+#                                                                #
+##################################################################
+
+### Parallelization Options
+# MPI parallelization
+MPI        	=	1
+
+# OpenMP/OpenACC (can only use one)
+OPENMP      =	1
+OPENACC	    =	0
+
+# OpenCL
+OPENCL      =	1
+SPLIT_DEV   =   1
+
+### I/O Options
+# I/O method (netcdf and/or binary)
+NCIO	    =	0
+BINIO	    =	1
+
+# Compile for history output
+HISTORY     =	0
+
+### Layout Options
+# DM/SVM Data Layout Options
+CFDL    	=	1
+SFDL    	=	1
+
+# padded size for tiling: default (0) uses SIMD_LENGTH
+PADDED_NUM	=	0
+
+### Vectorization Options- only valid for OpenMP/OpenACC
+# method for vectorization of RHS differentiation loops: 0 (none), 1 (outer loop), 2 (inner loop)
+RHS_SIMD_METHOD	=	2
+
+EXEC_DIR	=	run/HPCL
