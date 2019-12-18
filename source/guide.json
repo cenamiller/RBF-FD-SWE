@@ -1,0 +1,16 @@
+{"memory-pools": [
+                  {"id": 2, "type": "QRAM", "size": "4M", "comment": "Memory pool 2 is used for global variables"},
+                  {"id": 3, "type": "QRAM", "size": "4M", "comment": " "},
+                  {"id": 4, "type": "QRAM", "size": "4M", "comment": " "},
+                  {"id": 5, "type": "QRAM", "size": "4M", "comment": " "},
+                  {"id": 6, "type": "QRAM", "size": "4M", "comment": " "},
+                  {"id": 7, "type": "QRAM", "size": "1M", "comment": " "},
+                  {"id": 8, "type": "QRAM", "size": "1M", "comment": " "}],
+ "partitions": {"version": 1.0, "cenames": ["unassigned", "linux_edge", "xcvu13p"], 
+                "functions": {"RK_substep": "linux_edge", 
+                              "copy_fp_arr": "linux_edge", 
+                              "eval_K": "linux_edge", 
+                              "update_D": "linux_edge", 
+                              "update_H": "linux_edge", 
+                              "eval_RHS_swe": "xcvu13p"}}
+}
