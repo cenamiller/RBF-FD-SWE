@@ -1,4 +1,7 @@
 // Written by Samuel Elliott, Summer 2017. Last updated- Richelle Streater, Summer 2018
+#ifdef CACHEQ
+#include <cq.h>
+#endif
 
 #include <profiling.h>
 
@@ -10,7 +13,7 @@
 #ifdef USE_MPI
 #include <mpi.h>
 #else
-#include <sys/time.h>
+#include <time.h>
 #endif
 
 extern sim_params_struct sim_params;
@@ -39,14 +42,21 @@ timing_struct init_timer(int nattempts) {
     timing_struct timer;
     timer.t_init = 0.0;
     timer.t_ocl = 0.0;
-
+#ifdef CACHEQ
+    timer.t_main = (double*) cq_calloc(TIMER_POOL, nattempts, sizeof(double));
+    timer.t_eval_rhs = (double*) cq_calloc(TIMER_POOL, nattempts, sizeof(double));
+    timer.t_mpi = (double*) cq_calloc(TIMER_POOL, nattempts, sizeof(double));
+    timer.t_eval_K = (double*) cq_calloc(TIMER_POOL, nattempts, sizeof(double));
+    timer.t_update_D = (double*) cq_calloc(TIMER_POOL, nattempts, sizeof(double));
+    timer.t_update_H = (double*) cq_calloc(TIMER_POOL, nattempts, sizeof(double));
+#else
     timer.t_main = (double*) calloc(nattempts, sizeof(double));
     timer.t_eval_rhs = (double*) calloc(nattempts, sizeof(double));
     timer.t_mpi = (double*) calloc(nattempts, sizeof(double));
     timer.t_eval_K = (double*) calloc(nattempts, sizeof(double));
     timer.t_update_D = (double*) calloc(nattempts, sizeof(double));
     timer.t_update_H = (double*) calloc(nattempts, sizeof(double));
-	
+#endif
     return timer;
 }
 
@@ -116,13 +126,22 @@ void process_profiling_results() {
             if (i == 0 || max_timer.t_mpi[0] < t_mpi_i) max_timer.t_mpi[0] = t_mpi_i;
         }
 
+        if (nattempts > 5) {
         // Eliminate first two attempts from average for warmup time
-        for (int i = 2; i < nattempts; i++) {
-            double t_eval_rhs_i = global_sum_timer.t_eval_rhs[i] / (nsteps * mpi_size);
-            average_timer.t_eval_rhs[0] += t_eval_rhs_i / (nattempts-2);
-            if (i == 2 || min_timer.t_eval_rhs[0] > t_eval_rhs_i) min_timer.t_eval_rhs[0] = t_eval_rhs_i;
-            if (i == 2 || max_timer.t_eval_rhs[0] < t_eval_rhs_i) max_timer.t_eval_rhs[0] = t_eval_rhs_i;
-		}
+           for (int i = 2; i < nattempts; i++) {
+               double t_eval_rhs_i = global_sum_timer.t_eval_rhs[i] / (nsteps * mpi_size);
+               average_timer.t_eval_rhs[0] += t_eval_rhs_i / (nattempts-2);
+               if (i == 2 || min_timer.t_eval_rhs[0] > t_eval_rhs_i) min_timer.t_eval_rhs[0] = t_eval_rhs_i;
+               if (i == 2 || max_timer.t_eval_rhs[0] < t_eval_rhs_i) max_timer.t_eval_rhs[0] = t_eval_rhs_i;
+           }
+        } else {
+           for (int i = 0; i < nattempts; i++) {
+               double t_eval_rhs_i = global_sum_timer.t_eval_rhs[i] / (nsteps * mpi_size);
+               average_timer.t_eval_rhs[0] += t_eval_rhs_i / nattempts;
+               if (i == 0 || min_timer.t_eval_rhs[0] > t_eval_rhs_i) min_timer.t_eval_rhs[0] = t_eval_rhs_i;
+               if (i == 0 || max_timer.t_eval_rhs[0] < t_eval_rhs_i) max_timer.t_eval_rhs[0] = t_eval_rhs_i;
+           }
+	}
 
         timing_struct stddev2_timer = init_timer(1);
 

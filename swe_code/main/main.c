@@ -1,5 +1,9 @@
 // Written by Samuel Elliott, Summer 2017. Last update- Richelle Streater, 8/29/18
 
+#ifdef CACHEQ
+#include "cq.h"
+#endif
+
 #include <swe_config.h>
 #include <runtime_params.h>
 #include <input.h>
@@ -11,6 +15,9 @@
 #include <rk4_rbffd_swe.h>
 #include <halos.h>
 #include <profiling.h>
+#ifdef CACHEQ
+#define getTime()         (cq_nstime() / 1e9)
+#endif
 
 #ifdef USE_OCL
 #include <device_setup.h>
@@ -32,7 +39,7 @@
 
 // Global Variables
 sim_params_struct sim_params;		// runtime parameterizations and model configuration options
-PSMD_struct* LPSMD;		        	// local patch static model data
+PSMD_struct* LPSMD;		        // local patch static model data
 timing_struct local_timer;	    	// timing data for proviling
 
 
@@ -192,10 +199,17 @@ int main(int argc, char** argv) {
     // -------------------------------- Timestepping ----------------------------------------
     
     // initialize timestepping vars
+#ifdef CACHEQ
+    fType CQ_POOL(CQ_POOL_HK) * H = (fType CQ_POOL(CQ_POOL_HK) *) cq_malloc(CQ_POOL_HK,sizeof(fType) * LPSMD->patch_size * 4);
+    fType CQ_POOL(CQ_POOL_HK) * K = (fType CQ_POOL(CQ_POOL_HK) *) cq_malloc(CQ_POOL_HK,sizeof(fType) * LPSMD->patch_size * 4);
+    fType CQ_POOL(CQ_POOL_DF) * F = (fType CQ_POOL(CQ_POOL_DF) *) cq_malloc(CQ_POOL_DF,sizeof(fType) * LPSMD->compute_size * 4);
+    fType CQ_POOL(CQ_POOL_DF) * D = (fType CQ_POOL(CQ_POOL_DF) *) cq_malloc(CQ_POOL_DF,sizeof(fType) * LPSMD->compute_size * 4);
+#else
     fType* H = (fType*) malloc(sizeof(fType) * LPSMD->patch_size * 4);
     fType* K = (fType*) malloc(sizeof(fType) * LPSMD->patch_size * 4);
     fType* F = (fType*) malloc(sizeof(fType) * LPSMD->compute_size * 4);
     fType* D = (fType*) malloc(sizeof(fType) * LPSMD->compute_size * 4);
+#endif
 
     #ifdef _OPENACC
 		
@@ -289,12 +303,96 @@ int main(int argc, char** argv) {
         
     }
     
+#ifdef CACHEQ
+     // ------------------------------------------------------------------------
+     // For CACHEQ, we must canonicalize the PSMD and timing data structures
+     CQ_PSMD_struct* cq_psmd = 
+                      (CQ_PSMD_struct*)cq_malloc(2, sizeof(CQ_PSMD_struct));
+
+     // arguably this is cheating, but I know that the alignment is the same 
+     memcpy(cq_psmd, LPSMD, sizeof(*LPSMD)); 
+
+     int size = GSMD.padded_Nnodes;
+     void* x = cq_malloc(2, size * sizeof(*LPSMD->x));
+     void* y = cq_malloc(2, size * sizeof(*LPSMD->y));
+     void* z = cq_malloc(2, size * sizeof(*LPSMD->z));
+     void* f = cq_malloc(2, size * sizeof(*LPSMD->f));
+     void* ghm = cq_malloc(2, size * sizeof(*LPSMD->ghm));
+
+     memcpy(x, LPSMD->x, size * sizeof(*LPSMD->x));
+     memcpy(y, LPSMD->y, size * sizeof(*LPSMD->y));
+     memcpy(z, LPSMD->z, size * sizeof(*LPSMD->z));
+     memcpy(f, LPSMD->f, size * sizeof(*LPSMD->f));
+     memcpy(ghm, LPSMD->ghm, size * sizeof(*LPSMD->ghm));
+
+     cq_psmd->x = cq_canonicalize_pointer(x);
+     cq_psmd->y = cq_canonicalize_pointer(y);
+     cq_psmd->z = cq_canonicalize_pointer(z);
+     cq_psmd->f = cq_canonicalize_pointer(f);
+     cq_psmd->ghm = cq_canonicalize_pointer(ghm);
+
+     size *= 3;
+     void* p_u = cq_malloc(2, size * sizeof(*LPSMD->p_u));
+     void* p_v = cq_malloc(2, size * sizeof(*LPSMD->p_v));
+     void* p_w = cq_malloc(2, size * sizeof(*LPSMD->p_w));
+     void* gradghm = cq_malloc(2, size * sizeof(*LPSMD->gradghm));
+     
+     memcpy(p_u, LPSMD->p_u, size * sizeof(*LPSMD->p_u));
+     memcpy(p_v, LPSMD->p_v, size * sizeof(*LPSMD->p_v));
+     memcpy(p_w, LPSMD->p_w, size * sizeof(*LPSMD->p_w));
+     memcpy(gradghm, LPSMD->gradghm, size * sizeof(*LPSMD->gradghm));
+
+     cq_psmd->p_u = cq_canonicalize_pointer(p_u);
+     cq_psmd->p_v = cq_canonicalize_pointer(p_v);
+     cq_psmd->p_w = cq_canonicalize_pointer(p_w);
+     cq_psmd->gradghm = cq_canonicalize_pointer(gradghm);
+
+     size = GSMD.padded_Nnodes * GSMD.padded_Nnbr;
+     void* idx = cq_malloc(2, sizeof(int) * size);
+     void* Dx = cq_malloc(CQ_POOL_Dx, sizeof(fType) * size);
+     void* Dy = cq_malloc(CQ_POOL_Dy, sizeof(fType) * size);
+     void* Dz = cq_malloc(CQ_POOL_Dz, sizeof(fType) * size);
+     void* L = cq_malloc(CQ_POOL_L, sizeof(fType) * size);
+
+     memcpy(idx, LPSMD->idx, sizeof(int) * size);
+     memcpy(Dx, LPSMD->Dx, sizeof(fType) * size);
+     memcpy(Dy, LPSMD->Dy, sizeof(fType) * size);
+     memcpy(Dz, LPSMD->Dz, sizeof(fType) * size);
+     memcpy(L, LPSMD->L, sizeof(fType) * size);
+
+     cq_psmd->idx = cq_canonicalize_pointer(idx);
+     cq_psmd->Dx = cq_canonicalize_pointer(Dx);
+     cq_psmd->Dy = cq_canonicalize_pointer(Dy);
+     cq_psmd->Dz = cq_canonicalize_pointer(Dz);
+     cq_psmd->L = cq_canonicalize_pointer(L);
+
+     CQ_timing_struct* cq_timing = 
+                      (CQ_timing_struct*)cq_malloc(2, sizeof(CQ_timing_struct));
+
+     memcpy(cq_timing, &local_timer, sizeof(local_timer));
+     cq_timing->t_main = cq_canonicalize_pointer(local_timer.t_main);
+     cq_timing->t_eval_rhs = cq_canonicalize_pointer(local_timer.t_eval_rhs);
+     cq_timing->t_mpi = cq_canonicalize_pointer(local_timer.t_mpi);
+     cq_timing->t_eval_K = cq_canonicalize_pointer(local_timer.t_eval_K);
+     cq_timing->t_update_D = cq_canonicalize_pointer(local_timer.t_update_D);
+     cq_timing->t_update_H = cq_canonicalize_pointer(local_timer.t_update_H);
+#endif
     // --------------------------------------------------------------------------------------
     
     for (int attempt = 0; attempt < sim_params.nattempts; attempt++) {
         
         // reset initial state varible data for each attempt
+#ifdef STRIPE_OPT
+        for (int i = 0; i < LPSMD->patch_size; i++)
+        for (int j = 0; j < 4; j++)
+           H[SVM_LIN_ID(i,j)] = H_init[CFDL_SVM_LIN_ID(i,j)];
+#else
+#if 1 // ifdef CACHEQ
+        memcpy(H, H_init, LPSMD->patch_size * 4 * sizeof(fType));
+#else
         copy_fp_arr(H, H_init, LPSMD->patch_size * 4);
+#endif
+#endif
       
         if (sim_params.OCL == 1) {
             
@@ -329,6 +427,9 @@ int main(int argc, char** argv) {
         #endif
         
         local_timer.attempt = attempt;
+#ifdef CACHEQ
+        cq_timing->attempt = attempt;
+#endif
         t_start = getTime();
 
         // ------------------------------ Runge Kutta Main Loop ---------------------------------
@@ -352,9 +453,20 @@ int main(int argc, char** argv) {
                     #endif
                     #endif
                     
+                } else {
+#ifdef CACHEQ
+                    RK_substep(H, K, F, D, rk_val, 
+#ifdef RK_GCC_COMPILE
+                               LPSMD, &local_timer);
+#else
+                               (PSMD_struct*)cq_psmd, (timing_struct*)cq_timing);
+#endif
+#else
+                    RK_substep(H, K, F, D, rk_val);
+#endif
                 }
-                else RK_substep(H, K, F, D, rk_val);
             }
+printf("DEBUG2:  H=%.10f K=%.10f F=%.10f D=%.10f %d\n", *H, *K, *F, *D, i);
         }
         
         // --------------------------------------------------------------------------------------
@@ -388,6 +500,12 @@ int main(int argc, char** argv) {
         
         // Compare H array to expected values at t=100
         if (mpi_rank == 0) printf("Attempt %d:\t", attempt + 1);
+#ifdef STRIPE_OPT
+        memcpy(K, H, LPSMD->patch_size * 4 * sizeof(fType));
+        for (int i = 0; i < LPSMD->patch_size; i++)
+        for (int j = 0; j < 4; j++)
+           H[CFDL_SVM_LIN_ID(i,j)] = K[SVM_LIN_ID(i,j)];
+#endif
         verify_output(H, H_100);
     }
     

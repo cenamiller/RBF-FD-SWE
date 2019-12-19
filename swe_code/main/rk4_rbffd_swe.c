@@ -1,8 +1,17 @@
 // Written by Samuel Elliott, Summer 2017
 
+#ifdef CACHEQ
+#include "cq.h"
+#else
+#define CQ_POOL(x)
+#endif
+
 #include <rk4_rbffd_swe.h>
-#include <halos.h>
 #include <profiling.h>
+#include <halos.h>
+#ifdef CACHEQ
+#define getTime() cq_nstime() / 1e9
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -16,11 +25,42 @@
 #define ACC_SIMD_CLAUSE vector
 #endif
 
-extern PSMD_struct* LPSMD;
-extern timing_struct local_timer;
-
 extern int mpi_rank;
 extern int mpi_size;
+
+#ifdef CACHEQ
+#define OTHERARGS , LPSMD, timer
+#define local_timer (*timer)
+
+void eval_K(fType CQ_POOL(CQ_POOL_HK) * H, fType CQ_POOL(CQ_POOL_HK) * K, 
+            fType CQ_POOL(CQ_POOL_DF) * F, 
+            fType dt, PSMD_struct* LPSMD,
+            timing_struct* restrict timer);
+
+void update_D(fType CQ_POOL(CQ_POOL_DF) * D, fType CQ_POOL(CQ_POOL_DF) * F, 
+            fType coeff, PSMD_struct* LPSMD,
+            timing_struct* restrict timer);
+
+void update_H(fType CQ_POOL(CQ_POOL_HK) * restrict H, fType CQ_POOL(CQ_POOL_DF) * restrict D, 
+            fType dt, PSMD_struct* restrict LPSMD,
+            timing_struct* restrict timer);
+
+void eval_RHS_swe(fType CQ_POOL(CQ_POOL_HK)* K, fType CQ_POOL(CQ_POOL_DF)* F, 
+            fType CQ_POOL(CQ_POOL_K2) * K2,
+            PSMD_struct* LPSMD,
+            timing_struct* timer);
+
+void RK_substep(fType CQ_POOL(CQ_POOL_HK) * restrict H, fType CQ_POOL(CQ_POOL_HK) * restrict K, 
+                fType CQ_POOL(CQ_POOL_DF) * restrict F, fType CQ_POOL(CQ_POOL_DF) * restrict D, 
+                int substep_id, PSMD_struct* restrict LPSMD,
+                timing_struct* restrict timer) {
+
+    fType CQ_POOL(CQ_POOL_K2)* K2 = (fType CQ_POOL(CQ_POOL_K2)*)cq_malloc(CQ_POOL_K2, LPSMD->compute_size * sizeof(fType) * 4);
+    memcpy((void*)K2, (void*)(substep_id == 0 ? H : K), LPSMD->compute_size * sizeof(fType) * 4);
+#else
+define OTHERARGS
+extern PSMD_struct* LPSMD;
+extern timing_struct local_timer;
 
 void eval_K(fType* H, fType* K, fType* F, fType dt);
 void update_D(fType* D, fType* F, fType coeff);
@@ -28,52 +68,77 @@ void update_H(fType* H, fType* D, fType dt);
 void eval_RHS_swe(fType* K, fType* F);
 
 void RK_substep(fType* H, fType* K, fType* F, fType* D, int substep_id) {
-
+#endif
     // full RK4 timestep length
     const fType dt = LPSMD->dt;
 
     switch(substep_id) {
         case 0:
             // get F_0 = d/dt(K_0 = H)
+#ifdef CACHEQ
+            eval_RHS_swe(H, F, K2, LPSMD, timer);
+#else
             eval_RHS_swe(H, F);
+#endif
             // initialize D = F_0
             copy_fp_arr(D, F, LPSMD->compute_size * 4);
             // evaluate K_1 = H + (dt/2) * F_0
-            eval_K(H, K, F, dt/2.0);
+            eval_K(H, K, F, dt/2.0 OTHERARGS);
             break;
 
         case 1:
             // get F_1 = d/dt(K_1 = H + (dt/2) * F_0)
+#ifdef CACHEQ
+            eval_RHS_swe(K, F, K2, LPSMD, timer);
+#else
             eval_RHS_swe(K, F);
+#endif
             // update D += 2 * F_1
-            update_D(D, F, 2.0);
+            update_D(D, F, 2.0 OTHERARGS);
             // evaluate K_2 = H + (dt/2) * F_0
-            eval_K(H, K, F, dt/2.0);
+            eval_K(H, K, F, dt/2.0 OTHERARGS);
             break;
 
         case 2:
             // get F_2 = d/dt(K_2 = H + (dt/2) * F_1)
+#ifdef CACHEQ
+            eval_RHS_swe(K, F, K2, LPSMD, timer);
+#else
             eval_RHS_swe(K, F);
+#endif
             // update D += 2 * F_2
-            update_D(D, F, 2.0);
+            update_D(D, F, 2.0 OTHERARGS);
             // evaluate K_3 = H + dt * F_0
-            eval_K(H, K, F, dt);
+            eval_K(H, K, F, dt OTHERARGS);
             break;
 
         case 3:
             // get F_3 = d/dt(K_3 = H + dt * F_2)
+#ifdef CACHEQ
+            eval_RHS_swe(K, F, K2, LPSMD, timer);
+#else
             eval_RHS_swe(K, F);
+#endif
             // update D += F_3
-            update_D(D, F, 1.0);
+            update_D(D, F, 1.0 OTHERARGS);
             // update H
-            update_H(H, D, dt);
+            update_H(H, D, dt OTHERARGS);
             break;
     }
+
+#ifdef CACHEQ
+    cq_free((void*)K2);
+#endif
 }
 
+#ifdef CACHEQ
+CLANG_NOINLINE
+void copy_fp_arr(fType CQ_POOL(CQ_POOL_DF) * restrict dest, 
+                 fType CQ_POOL(CQ_POOL_DF) * restrict src, int size) {
+#else
 void copy_fp_arr(fType* dest, fType* src, int size) {
-
-    #ifdef _OPENACC
+#endif
+    #if defined(_OPENACC) || defined(CACHEQ)
     #pragma acc parallel loop gang vector vector_length(SIMD_LENGTH) present(dest[:size],src[:size])
     for (int i = 0; i < size; i++) {
         dest[i] = src[i];
@@ -83,8 +148,14 @@ void copy_fp_arr(fType* dest, fType* src, int size) {
     #endif
 }
 
+#ifdef CACHEQ
+CLANG_NOINLINE
+void update_H(fType CQ_POOL(CQ_POOL_HK) * restrict H, fType CQ_POOL(CQ_POOL_DF) * restrict D, 
+              fType dt, PSMD_struct* restrict LPSMD, 
+              timing_struct* restrict timer) {
+#else
 void update_H(fType* H, fType* D, fType dt) {
-
+#endif
     // patch information
     const int compute_pid_s = LPSMD->compute_pid_s;
     const int compute_size = LPSMD->compute_size;
@@ -120,8 +191,15 @@ void update_H(fType* H, fType* D, fType dt) {
     local_timer.t_mpi[local_timer.attempt] +=  (getTime() - t_start);
 }
 
+#ifdef CACHEQ
+CLANG_NOINLINE
+void eval_K(fType CQ_POOL(CQ_POOL_HK) * restrict H, fType CQ_POOL(CQ_POOL_HK) * restrict K, 
+            fType CQ_POOL(CQ_POOL_DF) * restrict F, fType dt, 
+            PSMD_struct* restrict LPSMD, 
+            timing_struct* restrict timer) {
+#else
 void eval_K(fType* H, fType* K, fType* F, fType dt) {
-
+#endif
     // patch information
     const int compute_pid_s = LPSMD->compute_pid_s;
     const int compute_size = LPSMD->compute_size;
@@ -157,8 +235,14 @@ void eval_K(fType* H, fType* K, fType* F, fType dt) {
     local_timer.t_mpi[local_timer.attempt] +=  (getTime() - t_start);
 }
 
+#ifdef CACHEQ
+CLANG_NOINLINE
+void update_D(fType CQ_POOL(CQ_POOL_DF) * restrict D, fType CQ_POOL(CQ_POOL_DF) * restrict F, 
+              fType coeff, PSMD_struct* restrict LPSMD, 
+              timing_struct* restrict timer) {
+#else
 void update_D(fType* D, fType* F, fType coeff) {
-
+#endif
     // patch information
     const int compute_size = LPSMD->compute_size;
 
@@ -185,9 +269,14 @@ void update_D(fType* D, fType* F, fType coeff) {
     local_timer.t_update_D[local_timer.attempt] += (getTime() - t_start);
 }
 
+#ifdef CACHEQ
+void eval_RHS_swe(fType CQ_POOL(CQ_POOL_HK)* K, fType CQ_POOL(CQ_POOL_DF)* F, 
+                  fType CQ_POOL(CQ_POOL_K2)* K2, 
+                  PSMD_struct* LPSMD, timing_struct* timer) {
+#else
 // Approximates RHS of SWE PDE using RBF-FD for the spatial differentiation and projects the results to confine motion to the surface of the sphere
 void eval_RHS_swe(fType* K, fType* F) {
-
+#endif
     // global constants
     const fType gh0 = LPSMD->gh0;
 
@@ -204,19 +293,22 @@ void eval_RHS_swe(fType* K, fType* F) {
     const fType* gradghm = LPSMD->gradghm;
 
     // DM data
+#ifdef CACHEQ
+    const int Nnbr = 31;
+#else
     const int Nnbr = LPSMD->Nnbr;
+#endif
     const int padded_Nnbr = LPSMD->padded_Nnbr;
 
     const int* idx = LPSMD->idx;
-    const fType* Dx = LPSMD->Dx;
-    const fType* Dy = LPSMD->Dy;
-    const fType* Dz = LPSMD->Dz;
-    const fType* L = LPSMD->L;
+    const fType CQ_POOL(CQ_POOL_Dx)* Dx = LPSMD->Dx;
+    const fType CQ_POOL(CQ_POOL_Dy)* Dy = LPSMD->Dy;
+    const fType CQ_POOL(CQ_POOL_Dz)* Dz = LPSMD->Dz;
+    const fType CQ_POOL(CQ_POOL_L)* L = LPSMD->L;
 
     // extract constants from patch structure
     const int compute_pid_s = LPSMD->compute_pid_s;
     const int compute_size = LPSMD->compute_size;
-    const int patch_size = LPSMD->patch_size;
 
     double t_start = getTime();
 
@@ -241,9 +333,10 @@ void eval_RHS_swe(fType* K, fType* F) {
     #endif
 	
     for (int i = 0; i < compute_size; i++) {
-
         // --------------- Calculate RBF-FD SV Spatial Differentiation Approximations for Corresponding Node --------------------- //
-
+#ifdef STRIPE_OPT
+        _cq_ignorelcd();
+#endif
         // temporary variables to hold state variable data for current node
         fType u;
         fType v;
@@ -283,16 +376,21 @@ void eval_RHS_swe(fType* K, fType* F) {
         #endif
 	
         for (int j = 0; j < Nnbr; j++) {
-
+#ifdef CACHEQ
+            _cq_unroll(Nnbr);
+#else
+            // Make things easier for me.
+            fType* K2 = K;
+#endif
             // get corresponding DM linear id and neighbor pid
             const int dm_lind = DM_LIN_ID(i, j, padded_Nnbr);
             const int nbr_pid = idx[dm_lind];
 
             // get neighbor node's state vars
             u = K[SVM_LIN_ID(nbr_pid, U_SV_ID)];
-            v = K[SVM_LIN_ID(nbr_pid, V_SV_ID)];
+            v = K2[SVM_LIN_ID(nbr_pid, V_SV_ID)];
             w = K[SVM_LIN_ID(nbr_pid, W_SV_ID)];
-            h = K[SVM_LIN_ID(nbr_pid, H_SV_ID)];
+            h = K2[SVM_LIN_ID(nbr_pid, H_SV_ID)];
 
             // update sums
             du_dx += Dx[dm_lind] * u;
@@ -322,9 +420,9 @@ void eval_RHS_swe(fType* K, fType* F) {
 
         // get current node's state vars
         u = K[SVM_LIN_ID(i + compute_pid_s, U_SV_ID)];
-        v = K[SVM_LIN_ID(i + compute_pid_s, V_SV_ID)];
+        v = K2[SVM_LIN_ID(i + compute_pid_s, V_SV_ID)];
         w = K[SVM_LIN_ID(i + compute_pid_s, W_SV_ID)];
-        h = K[SVM_LIN_ID(i + compute_pid_s, H_SV_ID)];
+        h = K2[SVM_LIN_ID(i + compute_pid_s, H_SV_ID)];
 
         // Evaluate RHS of unconstrained Momentum Equations
     
@@ -356,12 +454,22 @@ void eval_RHS_swe(fType* K, fType* F) {
     }
     }
 
-    local_timer.t_eval_rhs[local_timer.attempt] +=  (getTime() - t_start);
-
+    t_start = getTime() - t_start;
+#ifdef CACHEQ
+    printf("eval_RHS time %.6f msec\n", t_start * 1000.0);
+    timer->t_eval_rhs[timer->attempt] += t_start;
+#else
+    local_timer.t_eval_rhs[local_timer.attempt] += t_start;
+#endif
     // =========================================================================================================================================== //
 }
 
+#ifdef CACHEQ
+void print_SVM(fType CQ_POOL(CQ_POOL_HK) * H, 
+               PSMD_struct* LPSMD) {
+#else
 void print_SVM(fType* H) {
+#endif
 
     int N = LPSMD->patch_size;
 
