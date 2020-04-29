@@ -1,0 +1,21 @@
+#ifndef ADVANCE_H
+#define ADVANCE_H
+
+#include <profiling.h>
+#ifndef CQ_POOL
+#define CQ_POOL(x)
+#endif
+
+// Approximates one timestep of the constrained SWE PDE solution using RK4 timestepping and RBF-FD methods for the spatial differentiation
+
+//void RK_substep(fType CQ_POOL(3) * H, fType CQ_POOL(3) * K,
+//                fType CQ_POOL(3) * F, fType CQ_POOL(3) * D,
+//                int substep_id, PSMD_struct* LPSMD,
+//                timing_struct* local_timer);
+
+void copy_fp_arr(fType CQ_POOL(3) * dest, fType CQ_POOL(3) * src, int size);
+
+void print_SVM(fType CQ_POOL(3) * H, PSMD_struct* LPSMD);
+
+#endif
+

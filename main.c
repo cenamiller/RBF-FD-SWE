@@ -1,5 +1,12 @@
 // to build: /usr/bin/gcc main.c finish.c output.c advance.c rhs.c halo_update.c SWE_testcase5.c vmath.c Input.c profiling.c -O3 -I. -o pdex
+
+#ifdef CACHEQ
+#include "cq.h"   // use cq_malloc()
+#define getTime() cq_nstime()
+#endif
+
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <floating_types.h>
@@ -7,13 +14,20 @@
 #include <NS.h>
 #include <rcm.h>
 #include <profiling.h>
+#include <vmath.h>
 
 // Only need _VERBOSE_ to debug initialization
 #undef _VERBOSE_
 #define NCheckAnswers 100
 
-void RK3_advance(fType dt, fType *t, int NPts, fType *S, void (*fptr)( const fType t, const fType* S, fType* K));
-void RK4_advance(fType dt, fType *t, int NPts, fType *S, void (*fptr)( const fType t, const fType* S, fType* K));
+void RK3_advance(fType dt, fType *t, int NPts, fType *S, void fswe( const fType t, const fType* S, fType* K));
+#ifdef CACHEQ
+
+//void RK4_advance(fType dt, CQ_timing_struct *t, int NPts, fType *S, void fswe( const CQ_timing_struct t, const fType* S, fType* K));
+void RK4_advance(fType dt, fType *t, int NPts, fType *S, void fswe( const fType t, const fType* S, fType* K));
+#else
+void RK4_advance(fType dt, fType *t, int NPts, fType *S, void fswe( const fType t, const fType* S, fType* K));
+#endif
 void output(const fType t, const int NState, const fType *S);
 void history(const char* pdecase, fType *S, fType *S_obs, int NPts);
 
@@ -25,7 +39,13 @@ void finish(fType *S, fType *K);
 
 void fsimple( const fType t, const fType *S, fType* K );
 void   faero( const fType t, const fType *S, fType* K );
+#ifdef CACHEQ
+
+//void    fswe( const CQ_timing_struct t, const fType* S, fType* K );
 void    fswe( const fType t, const fType* S, fType* K );
+#else
+void    fswe( const fType t, const fType* S, fType* K );
+#endif
 void fstraka( const fType t, const fType* S, fType* K );
 
 // SWE operators...
@@ -57,11 +77,17 @@ int main(int argc, char *argv[])
   fType* S=NULL;
   fType* S_obs=NULL;
   fType* S_ref=NULL;
+  fType* K=NULL;
   int *mapping=NULL;
   char inputFile[30];
   
   void (*fptr)( const fType t, const fType* S, fType* K) = NULL; //function pointer to assign RHS for specified problem
-
+#ifdef CACHEQ
+  CQ_timing_struct* cq_timing = (CQ_timing_struct*)malloc(sizeof(CQ_timing_struct));
+  memcpy(cq_timing, &local_timer, sizeof(local_timer));
+  cq_timing->t_update = cq_canonicalize_pointer(local_timer.t_update);
+  cq_timing->t_rhs = cq_canonicalize_pointer(local_timer.t_rhs);
+#endif
   if(argc==2)
     {
       if(! strcmp(argv[1], "simple")){
@@ -116,6 +142,7 @@ int main(int argc, char *argv[])
 	S_obs = (fType*) calloc(NPts, sizeof(fType));
 	S_ref = (fType*) calloc(NPts, sizeof(fType));
 
+	K     = (fType*) malloc(NPts * sizeof(fType));
 	SWE_init_bin(inputFile, testcase, SWE, S);
 	dt = SWE->dt;           // timestep in seconds
 
@@ -165,7 +192,7 @@ int main(int argc, char *argv[])
       }
     }
   else{
-    printf("ERROR IN MAIN: Invalid no of command line arguments\n");
+    printf("ERROR IN MAIN: Invalid num of command line arguments\n");
     printf("Correct usage is: ./pdex {simple,aero,swe,straka}\n");    
     exit(-1);
   }
@@ -195,7 +222,13 @@ int main(int argc, char *argv[])
   }
   else if (RK_Order == 4){
     for(int it=0; it<Nsteps; it++){
-      RK4_advance(dt,&t,NPts,S,fptr);
+#ifdef CACHEQ
+
+      //RK4_advance(dt,cq_timing,NPts,S,fswe); //S-Size of NPts
+      RK4_advance(dt,&t,NPts,S,fswe); //S-Size of NPts
+#else
+      RK4_advance(dt,&t,NPts,S,fswe); //S-Size of NPts
+#endif
       if (it==NCheckAnswers-1){
 	printf("\nSaving state variable After %d iterations ",it+1);
 	history(argv[1],S,S_obs,NPts);
