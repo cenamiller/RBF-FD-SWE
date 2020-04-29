@@ -1,0 +1,78 @@
+
+#RBF-FD-Prototype
+
+Overview: This is a prototype PDE solver. Supported time integration schemes are either RK3 or RK4. 
+The model is designed to easily integate new systems of equations by creating a new rhs 
+function f* in rhs.c.
+
+Language. The code is written in C, but be advised it needs a lot of cleaning up.
+
+Precision. The code supports easy toggling between float or double execution. 
+To change precision, go to floating_types.h and toggle the fType typedef.
+
+Compilers. The code has only been tested on the Clang 11 compiler.
+
+Parallelism. It is serial - all MPI, OpenMP, OpenCL and OpenACC has been stripped out.
+
+##Test Cases
+
+There are three supported test cases: {simple, aero, swe}
+
+{simple} is an system of one equation.
+
+{aero} integrates two equations and simulates a falling body with a drag term.
+
+{swe} integrates the Drake and Williamson Test Case 5 (flow over a mountain) for the 
+shallow water equations on the sphere using the Radial Basis Function Finite Difference (RBD-FD) Method. 
+The swe case requires an initialization file. The code builds the 10,242 "node" case on an 
+icosahedral grid, although the code is completely unstructured. In RBFs terminology "node"
+corresponds to the notion of a grid point. 
+
+{straka} a nonhydrostatic atmospheric test case, again using RBF-FD. Strake is under 
+development, not supported at this time.
+
+## Build 
+
+To compile the PDE solver:
+
+```bash
+make clean
+make
+```
+## Run
+
+To run the PDE solver:
+
+```bash
+./pdex case
+```
+Where case = {simple, aero, swe}
+
+##Correctness
+
+{swe} Only swe has a built in test verification. 
+
+For single precision:
+
+u L1 error = 9.143353e-05
+v L1 error = 7.724762e-05
+w L1 error = 6.432120e-05
+h L1 error = 2.081906e-02
+
+For double precision:
+
+u L1 error = 7.660539e-14
+v L1 error = 6.772360e-14
+w L1 error = 5.123566e-14
+h L1 error = 1.455192e-11
+
+##Performance
+
+Serial performance (Clang 11.0) on 2.6 GHz Intel Core i7:
+
+time in rhs = 0.005265 Gflops = 8.233032
+time in update = 0.000127 Gflops = 3.860712
+
+## License
+
+GNU General Public License v3.0
